@@ -1,0 +1,371 @@
+-- =============================================
+-- Лабораторна робота №4
+-- Аналітичні SQL-запити (OLAP)
+-- Платформа для онлайн-курсів
+-- Студентка: Якубовська О.В., група ІО-45
+-- =============================================
+
+
+-- ============================================================
+-- РОЗДІЛ 1: АГРЕГАЦІЙНІ ФУНКЦІЇ (COUNT, SUM, AVG, MIN, MAX)
+-- ============================================================
+
+-- 1.1 Загальна кількість студентів, викладачів та курсів
+SELECT
+    (SELECT COUNT(*) FROM Student)     AS total_students,
+    (SELECT COUNT(*) FROM Instructor)  AS total_instructors,
+    (SELECT COUNT(*) FROM Course)      AS total_courses;
+
+-- 1.2 Середня, мінімальна та максимальна ціна курсів
+SELECT
+    ROUND(AVG(Price), 2) AS avg_price,
+    MIN(Price)           AS min_price,
+    MAX(Price)           AS max_price,
+    SUM(Price)           AS total_price_sum
+FROM Course;
+
+-- 1.3 Кількість зарахувань по статусах
+SELECT
+    Status,
+    COUNT(*) AS enrollment_count
+FROM Enrollment
+GROUP BY Status
+ORDER BY enrollment_count DESC;
+
+-- 1.4 Середній рейтинг викладачів
+SELECT
+    ROUND(AVG(Rating), 2) AS avg_instructor_rating,
+    MIN(Rating)            AS min_rating,
+    MAX(Rating)            AS max_rating
+FROM Instructor;
+
+-- 1.5 Кількість модулів у кожному курсі
+SELECT
+    c.Title     AS CourseTitle,
+    COUNT(m.ModuleID) AS module_count
+FROM Course c
+LEFT JOIN Module m ON c.CourseID = m.CourseID
+GROUP BY c.CourseID, c.Title
+ORDER BY module_count DESC;
+
+-- 1.6 Середній прогрес студентів по всіх курсах
+SELECT ROUND(AVG(Progress), 2) AS avg_progress
+FROM Enrollment;
+
+-- 1.7 Загальна сума балів всіх студентів
+SELECT SUM(TotalPoints) AS total_points_all_students
+FROM Student;
+
+
+-- ============================================================
+-- РОЗДІЛ 2: GROUP BY ТА HAVING
+-- ============================================================
+
+-- 2.1 Кількість студентів за академічним рівнем
+SELECT
+    AcademicLevel,
+    COUNT(*) AS student_count
+FROM Student
+GROUP BY AcademicLevel
+ORDER BY student_count DESC;
+
+-- 2.2 Кількість зарахувань на кожен курс
+SELECT
+    c.Title     AS CourseName,
+    COUNT(e.EnrollmentID) AS enrollment_count
+FROM Course c
+LEFT JOIN Enrollment e ON c.CourseID = e.CourseID
+GROUP BY c.CourseID, c.Title
+ORDER BY enrollment_count DESC;
+
+-- 2.3 Середній рейтинг відгуків по кожному курсу
+SELECT
+    c.Title            AS CourseName,
+    COUNT(r.ReviewID)  AS review_count,
+    ROUND(AVG(r.Rating), 2) AS avg_rating
+FROM Course c
+LEFT JOIN Review r ON c.CourseID = r.CourseID
+GROUP BY c.CourseID, c.Title
+ORDER BY avg_rating DESC NULLS LAST;
+
+-- 2.4 Курси, де кількість зарахувань >= 2 (HAVING)
+SELECT
+    c.Title            AS CourseName,
+    COUNT(e.EnrollmentID) AS enrollment_count
+FROM Course c
+JOIN Enrollment e ON c.CourseID = e.CourseID
+GROUP BY c.CourseID, c.Title
+HAVING COUNT(e.EnrollmentID) >= 2
+ORDER BY enrollment_count DESC;
+
+-- 2.5 Викладачі, які ведуть більше одного курсу (HAVING)
+SELECT
+    u.FirstName || ' ' || u.LastName AS InstructorName,
+    COUNT(c.CourseID) AS course_count
+FROM "User" u
+JOIN Instructor i ON u.UserID = i.UserID
+JOIN Course c ON i.UserID = c.InstructorID
+GROUP BY u.UserID, u.FirstName, u.LastName
+HAVING COUNT(c.CourseID) > 1
+ORDER BY course_count DESC;
+
+-- 2.6 Курси з середнім відгуком вище 4 (HAVING з AVG)
+SELECT
+    c.Title            AS CourseName,
+    ROUND(AVG(r.Rating), 2) AS avg_review_rating
+FROM Course c
+JOIN Review r ON c.CourseID = r.CourseID
+GROUP BY c.CourseID, c.Title
+HAVING AVG(r.Rating) > 4
+ORDER BY avg_review_rating DESC;
+
+-- 2.7 Студенти з середнім прогресом по курсах вище 50%
+SELECT
+    u.FirstName || ' ' || u.LastName AS StudentName,
+    ROUND(AVG(e.Progress), 2)        AS avg_progress
+FROM "User" u
+JOIN Student s ON u.UserID = s.UserID
+JOIN Enrollment e ON s.UserID = e.StudentID
+GROUP BY u.UserID, u.FirstName, u.LastName
+HAVING AVG(e.Progress) > 50
+ORDER BY avg_progress DESC;
+
+
+-- ============================================================
+-- РОЗДІЛ 3: JOIN-запити (INNER, LEFT, RIGHT, FULL, CROSS)
+-- ============================================================
+
+-- 3.1 INNER JOIN — студенти та курси, на які вони записані
+SELECT
+    u.FirstName || ' ' || u.LastName AS StudentName,
+    c.Title    AS CourseName,
+    e.Progress,
+    e.Status
+FROM Enrollment e
+INNER JOIN Student s  ON e.StudentID = s.UserID
+INNER JOIN "User" u   ON s.UserID    = u.UserID
+INNER JOIN Course c   ON e.CourseID  = c.CourseID
+ORDER BY u.LastName, c.Title;
+
+-- 3.2 LEFT JOIN — всі курси, навіть ті, на які ніхто не записаний
+SELECT
+    c.Title              AS CourseName,
+    c.Price,
+    COUNT(e.EnrollmentID) AS enrollment_count
+FROM Course c
+LEFT JOIN Enrollment e ON c.CourseID = e.CourseID
+GROUP BY c.CourseID, c.Title, c.Price
+ORDER BY enrollment_count DESC;
+
+-- 3.3 LEFT JOIN — всі курси та їхні відгуки (включаючи курси без відгуків)
+SELECT
+    c.Title            AS CourseName,
+    r.Rating,
+    r.CommentText,
+    u.FirstName || ' ' || u.LastName AS ReviewerName
+FROM Course c
+LEFT JOIN Review r  ON c.CourseID  = r.CourseID
+LEFT JOIN Student s ON r.StudentID = s.UserID
+LEFT JOIN "User" u  ON s.UserID    = u.UserID
+ORDER BY c.Title, r.ReviewDate DESC;
+
+-- 3.4 RIGHT JOIN — всі відгуки, навіть якби курс був видалений
+SELECT
+    c.Title AS CourseName,
+    r.Rating,
+    r.CommentText
+FROM Course c
+RIGHT JOIN Review r ON c.CourseID = r.CourseID
+ORDER BY r.ReviewDate DESC;
+
+-- 3.5 FULL JOIN — всі студенти та всі зарахування (відповідні та невідповідні)
+SELECT
+    u.FirstName || ' ' || u.LastName AS StudentName,
+    c.Title AS CourseName,
+    e.Progress
+FROM Student s
+FULL JOIN Enrollment e ON s.UserID    = e.StudentID
+FULL JOIN "User" u     ON s.UserID    = u.UserID
+FULL JOIN Course c     ON e.CourseID  = c.CourseID
+ORDER BY u.LastName NULLS LAST;
+
+-- 3.6 CROSS JOIN — комбінації всіх студентів і всіх курсів
+--     (показує, які комбінації теоретично можливі)
+SELECT
+    u.FirstName || ' ' || u.LastName AS StudentName,
+    c.Title AS CourseName
+FROM Student s
+CROSS JOIN Course c
+JOIN "User" u ON s.UserID = u.UserID
+ORDER BY u.LastName, c.Title;
+
+-- 3.7 Триджоін: викладач — курс — кількість студентів
+SELECT
+    u.FirstName || ' ' || u.LastName AS InstructorName,
+    i.Expertise,
+    c.Title                          AS CourseName,
+    COUNT(e.StudentID)               AS enrolled_students
+FROM Instructor i
+JOIN "User" u   ON i.UserID     = u.UserID
+JOIN Course c   ON i.UserID     = c.InstructorID
+LEFT JOIN Enrollment e ON c.CourseID = e.CourseID
+GROUP BY u.UserID, u.FirstName, u.LastName, i.Expertise, c.CourseID, c.Title
+ORDER BY enrolled_students DESC;
+
+
+-- ============================================================
+-- РОЗДІЛ 4: ПІДЗАПИТИ (у SELECT, WHERE, HAVING)
+-- ============================================================
+
+-- 4.1 Підзапит у SELECT — кількість зарахувань для кожного курсу
+SELECT
+    c.Title,
+    c.Price,
+    (SELECT COUNT(*)
+     FROM Enrollment e
+     WHERE e.CourseID = c.CourseID) AS total_enrollments
+FROM Course c
+ORDER BY total_enrollments DESC;
+
+-- 4.2 Підзапит у WHERE — студенти, які записані хоча б на один завершений курс
+SELECT
+    u.FirstName,
+    u.LastName,
+    s.TotalPoints
+FROM "User" u
+JOIN Student s ON u.UserID = s.UserID
+WHERE u.UserID IN (
+    SELECT StudentID
+    FROM Enrollment
+    WHERE Status = 'Completed'
+)
+ORDER BY s.TotalPoints DESC;
+
+-- 4.3 Підзапит у WHERE — курси дорожчі за середню ціну
+SELECT
+    Title,
+    Price
+FROM Course
+WHERE Price > (
+    SELECT AVG(Price) FROM Course
+)
+ORDER BY Price DESC;
+
+-- 4.4 Підзапит у WHERE — студенти, які ще не залишили жодного відгуку
+SELECT
+    u.FirstName || ' ' || u.LastName AS StudentName,
+    s.TotalPoints
+FROM "User" u
+JOIN Student s ON u.UserID = s.UserID
+WHERE u.UserID NOT IN (
+    SELECT DISTINCT StudentID FROM Review
+);
+
+-- 4.5 Підзапит у HAVING — курси з кількістю зарахувань вище середньої
+SELECT
+    c.Title AS CourseName,
+    COUNT(e.EnrollmentID) AS enrollment_count
+FROM Course c
+JOIN Enrollment e ON c.CourseID = e.CourseID
+GROUP BY c.CourseID, c.Title
+HAVING COUNT(e.EnrollmentID) > (
+    SELECT AVG(cnt)
+    FROM (
+        SELECT COUNT(*) AS cnt
+        FROM Enrollment
+        GROUP BY CourseID
+    ) sub
+)
+ORDER BY enrollment_count DESC;
+
+-- 4.6 Корельований підзапит — курси, в яких середній відгук вищий за загальний середній рейтинг
+SELECT
+    c.Title AS CourseName,
+    (SELECT ROUND(AVG(r.Rating), 2)
+     FROM Review r
+     WHERE r.CourseID = c.CourseID) AS avg_course_rating
+FROM Course c
+WHERE (
+    SELECT AVG(r.Rating)
+    FROM Review r
+    WHERE r.CourseID = c.CourseID
+) > (SELECT AVG(Rating) FROM Review)
+ORDER BY avg_course_rating DESC;
+
+-- 4.7 Підзапит у FROM (похідна таблиця) — топ-3 курси за середнім відгуком
+SELECT *
+FROM (
+    SELECT
+        c.Title AS CourseName,
+        ROUND(AVG(r.Rating), 2) AS avg_rating,
+        COUNT(r.ReviewID)       AS review_count
+    FROM Course c
+    JOIN Review r ON c.CourseID = r.CourseID
+    GROUP BY c.CourseID, c.Title
+) AS course_ratings
+ORDER BY avg_rating DESC
+LIMIT 3;
+
+
+-- ============================================================
+-- РОЗДІЛ 5: КОМБІНОВАНІ АНАЛІТИЧНІ ЗАПИТИ (JOIN + GROUP BY)
+-- ============================================================
+
+-- 5.1 Зведена статистика по кожному курсу
+SELECT
+    c.Title                         AS CourseName,
+    c.Price,
+    u.FirstName || ' ' || u.LastName AS InstructorName,
+    COUNT(DISTINCT e.StudentID)      AS enrolled_students,
+    ROUND(AVG(e.Progress), 2)        AS avg_progress,
+    COUNT(DISTINCT r.ReviewID)       AS review_count,
+    ROUND(AVG(r.Rating), 2)          AS avg_review_rating
+FROM Course c
+JOIN Instructor i    ON c.InstructorID = i.UserID
+JOIN "User" u        ON i.UserID       = u.UserID
+LEFT JOIN Enrollment e ON c.CourseID   = e.CourseID
+LEFT JOIN Review r     ON c.CourseID   = r.CourseID
+GROUP BY c.CourseID, c.Title, c.Price, u.FirstName, u.LastName
+ORDER BY enrolled_students DESC;
+
+-- 5.2 Активність студентів: кількість курсів, середній прогрес, кількість відгуків
+SELECT
+    u.FirstName || ' ' || u.LastName AS StudentName,
+    s.AcademicLevel,
+    s.TotalPoints,
+    COUNT(DISTINCT e.CourseID)      AS courses_enrolled,
+    ROUND(AVG(e.Progress), 2)       AS avg_progress,
+    COUNT(DISTINCT r.ReviewID)      AS reviews_written
+FROM "User" u
+JOIN Student s           ON u.UserID    = s.UserID
+LEFT JOIN Enrollment e   ON s.UserID    = e.StudentID
+LEFT JOIN Review r        ON s.UserID    = r.StudentID
+GROUP BY u.UserID, u.FirstName, u.LastName, s.AcademicLevel, s.TotalPoints
+ORDER BY s.TotalPoints DESC;
+
+-- 5.3 Продуктивність викладачів: кількість курсів, середній рейтинг, кількість студентів
+SELECT
+    u.FirstName || ' ' || u.LastName AS InstructorName,
+    i.Expertise,
+    i.Rating                         AS instructor_rating,
+    COUNT(DISTINCT c.CourseID)       AS course_count,
+    COUNT(DISTINCT e.StudentID)      AS total_students,
+    ROUND(AVG(r.Rating), 2)          AS avg_review_rating
+FROM "User" u
+JOIN Instructor i        ON u.UserID       = i.UserID
+LEFT JOIN Course c       ON i.UserID       = c.InstructorID
+LEFT JOIN Enrollment e   ON c.CourseID     = e.CourseID
+LEFT JOIN Review r       ON c.CourseID     = r.CourseID
+GROUP BY u.UserID, u.FirstName, u.LastName, i.Expertise, i.Rating
+ORDER BY total_students DESC;
+
+-- 5.4 Розподіл студентів за академічним рівнем і середнім прогресом
+SELECT
+    s.AcademicLevel,
+    COUNT(DISTINCT s.UserID)        AS student_count,
+    ROUND(AVG(e.Progress), 2)       AS avg_progress,
+    ROUND(AVG(s.TotalPoints), 2)    AS avg_points
+FROM Student s
+LEFT JOIN Enrollment e ON s.UserID = e.StudentID
+GROUP BY s.AcademicLevel
+ORDER BY avg_progress DESC;
